@@ -1,0 +1,36 @@
+services:
+  # ── Backend: FastAPI ────────────────────────────────────────────────────────
+  - type: web
+    name: eric-moon-api
+    runtime: python
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: "pip install -r requirements.txt && playwright install chromium --with-deps"
+    startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PAGESPEED_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+
+  # ── Frontend: Next.js ───────────────────────────────────────────────────────
+  - type: web
+    name: eric-moon
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: frontend
+    buildCommand: "npm install && npm run build"
+    startCommand: "npm start"
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: "https://eric-moon-api.onrender.com"
+      - key: NODE_VERSION
+        value: "18"
+      - key: PORT
+        value: "3000"

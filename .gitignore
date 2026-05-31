@@ -3,7 +3,7 @@ __pycache__/
 *.pyc
 .env
 .env.local
-.env.production
+# .env.production is tracked so Render build picks up NEXT_PUBLIC_API_URL
 *.db
 *.sqlite
 reports/*.docx
