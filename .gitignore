@@ -1,21 +1,43 @@
+# ── Python ────────────────────────────────────────────────────────────────────
 venv/
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+
+# ── Environment & secrets — NEVER commit these ────────────────────────────────
 .env
 .env.local
-# .env.production is tracked so Render build picks up NEXT_PUBLIC_API_URL
+.env.production
+.env.*.local
+# .env.example IS safe to commit (it contains no real values)
+
+# ── Databases ─────────────────────────────────────────────────────────────────
 *.db
 *.sqlite
+*.sqlite3
+backend/seo_agent.db
+
+# ── Generated reports — created at runtime, not source code ──────────────────
+backend/reports/
+# Legacy pattern (keep for safety)
 reports/*.docx
+
+# ── Log files ─────────────────────────────────────────────────────────────────
+backend/logs/
+*.log
+
+# ── Node / Next.js ────────────────────────────────────────────────────────────
 node_modules/
 .next/
 .vercel/
+frontend/.vercel/
 dist/
 build/
-*.log
+
+# ── OS / IDE ──────────────────────────────────────────────────────────────────
 .DS_Store
 .vscode/
 .idea/
-.DS_Store
-backend/seo_agent.db
-frontend/.vercel/
+Thumbs.db

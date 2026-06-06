@@ -6,17 +6,36 @@ services:
     region: singapore
     plan: free
     rootDir: backend
-    buildCommand: "pip install -r requirements.txt && playwright install chromium --with-deps"
+    buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: SECRET_KEY
         generateValue: true
+      - key: DATABASE_URL
+        value: "sqlite:///./seo_agent.db"
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: LOG_LEVEL
+        value: "INFO"
+      # ── Set these manually in Render Dashboard → Environment ──
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: "gemini-2.5-flash"
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: PAGESPEED_API_KEY
         sync: false
-      - key: PYTHON_VERSION
-        value: "3.11.0"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        value: "https://eric-moon-api.onrender.com/api/gsc/auth/callback"
+      - key: FRONTEND_URL
+        value: "https://eric-moon.onrender.com"
+      - key: OPR_API_KEY
+        sync: false
 
   # ── Frontend: Next.js ───────────────────────────────────────────────────────
   - type: web

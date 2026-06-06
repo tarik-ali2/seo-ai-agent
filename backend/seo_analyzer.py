@@ -19,70 +19,70 @@ STOP_WORDS = {
 
 PRIORITY = {"critical": 1, "high": 2, "medium": 3, "low": 4}
 
-# ── Local SEO target cities ────────────────────────────────────────────────────
-LOCAL_CITIES = ["Agra", "Lucknow", "Ghaziabad", "Noida", "Delhi", "NCR"]
-LOCAL_CITY_SLUGS = ["agra", "lucknow", "ghaziabad", "noida", "delhi", "ncr"]
-
-
 def _local_seo_suggestions(url: str, title: str, meta: str, h1_list: list, page_type: str, keywords: list) -> dict:
-    """Generate local SEO recommendations targeting UP/NCR cities."""
-    text = (title + " " + meta + " " + " ".join(h1_list)).lower()
-    cities_present = [c for c in LOCAL_CITY_SLUGS if c in text]
-    cities_missing = [c for c in LOCAL_CITIES if c.lower() not in text]
+    """Generate local SEO recommendations based on actual page content."""
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc.replace("www.", "")
+    kw = keywords[0][0] if keywords else "your service"
+    kw2 = keywords[1][0] if len(keywords) > 1 else kw
 
-    kw = keywords[0][0] if keywords else "sell old phone"
+    # Detect city mentions in title, meta, and H1s
+    combined = title + " " + meta + " " + " ".join(h1_list)
+    city_pattern = re.findall(r'\b([A-Z][a-z]{3,}(?:\s[A-Z][a-z]+)?)\b', combined)
+    _ = page_type  # available for future page-type-specific local rules
+    cities_present = list(set(city_pattern))[:5]
 
     suggestions = []
     if not cities_present:
         suggestions.append({
-            "issue": "No local city targeting found",
-            "fix": f"Add city names to title/meta for local SEO",
-            "example": f"Title: 'Sell Old Phone in Noida & Ghaziabad — Best Price | [Brand]'",
+            "issue": "No local city/region targeting found in title or meta",
+            "fix": "Add your target city/region to title and meta description for local SEO",
+            "example": f"Title: '{kw.title()} in [Your City] — [Benefit] | {domain}'",
         })
 
-    city_pages = []
-    for city in LOCAL_CITIES[:4]:
-        city_pages.append({
-            "page": f"/{kw.replace(' ','-')}-{city.lower()}",
-            "title": f"{kw.title()} in {city} — Best Price, Free Pickup | [Brand]",
-            "meta": f"Sell your old phone in {city} and get instant cash. Free doorstep pickup, best price guarantee. {kw.title()} service available in {city}.",
-            "h1": f"Sell Your Old Phone in {city} — Instant Cash",
+    gmb_checklist = [
+        "Create/claim Google Business Profile (GMB) for your location",
+        "Add your complete service area (cities/regions you serve)",
+        "Upload 10+ high-quality photos of your business/product",
+        "Collect 20+ genuine Google reviews from customers",
+        "Post weekly updates: offers, news, new services",
+        "Add correct business hours, phone, and address",
+    ]
+
+    city_pages = [
+        {
+            "page": f"/{kw.replace(' ', '-')}-[city-slug]",
+            "title": f"{kw.title()} in [City] — [Key Benefit] | [Brand]",
+            "meta": f"Looking for {kw} in [City]? Get [benefit]. [CTA]. Serving [City] and nearby areas.",
+            "h1": f"{kw.title()} in [City] — [Unique Value Proposition]",
             "schema_local": {
                 "@context": "https://schema.org",
                 "@type": "LocalBusiness",
                 "name": "[Brand Name]",
-                "description": f"Best {kw} service in {city}",
-                "areaServed": city,
+                "description": f"Best {kw} service in [City]",
+                "areaServed": "[City Name]",
                 "address": {
                     "@type": "PostalAddress",
-                    "addressLocality": city,
-                    "addressRegion": "Uttar Pradesh",
-                    "addressCountry": "IN"
+                    "addressLocality": "[City]",
+                    "addressRegion": "[State]",
+                    "addressCountry": "[Country Code]"
                 },
-                "telephone": "[+91-XXXXXXXXXX]",
-                "url": f"{url}/{kw.replace(' ','-')}-{city.lower()}"
+                "telephone": "[Phone Number]",
+                "url": f"{url}/{kw.replace(' ', '-')}-[city-slug]"
             }
-        })
-
-    gmb_checklist = [
-        "Create/claim Google Business Profile (GMB)",
-        "Add all 4 city service areas: Agra, Lucknow, Ghaziabad, Noida",
-        "Add 10+ photos of your store/process",
-        "Get 20+ Google reviews (5 per city)",
-        "Post weekly updates about new offers/areas",
-        "Add service area radius in GMB settings",
+        }
     ]
 
     return {
         "cities_found_in_content": cities_present,
-        "cities_missing": cities_missing,
         "suggestions": suggestions,
         "city_landing_pages": city_pages,
         "gmb_checklist": gmb_checklist,
         "priority_keywords": [
-            f"sell old phone {city.lower()}" for city in LOCAL_CITIES[:4]
-        ] + [
-            f"buy refurbished phone {city.lower()}" for city in LOCAL_CITIES[:4]
+            f"{kw} [your city]",
+            f"best {kw} near me",
+            f"{kw2} [your city]",
+            f"top {kw} service [your city]",
         ],
     }
 
@@ -148,8 +148,9 @@ def _issue(priority: str, element: str, problem: str, fix: str) -> dict:
 
 def detect_page_type(url: str, title: str, h1_list: list) -> str:
     url_lower = url.lower()
-    text = (title + " " + " ".join(h1_list)).lower()
-    if any(k in url_lower for k in ["/product", "/item", "/p/", "/buy", "/sell", "/mobile", "/phone"]):
+    title_text = (title + " " + " ".join(h1_list)).lower()
+    if any(k in url_lower for k in ["/product", "/item", "/p/", "/buy", "/sell", "/mobile", "/phone"]) \
+            or any(k in title_text for k in ["buy now", "add to cart", "product details"]):
         return "product"
     if any(k in url_lower for k in ["/category", "/collection", "/cat/", "/shop", "/brand"]):
         return "category"
@@ -241,11 +242,12 @@ def _smart_meta(current: str, page_type: str, keywords: list) -> str:
     kw1 = keywords[0][0] if keywords else "[primary keyword]"
     kw2 = keywords[1][0] if len(keywords) > 1 else "[secondary keyword]"
     templates = {
-        "homepage":  f"Sell your old {kw1} online and get the best price instantly. Free pickup, instant payment. Compare prices for {kw2} and more. Start now!",
+        "homepage":  f"[Brand]: your trusted source for {kw1}. Discover {kw2} and more. [Key benefit]. [CTA — e.g. 'Get started today!']",
         "product":   f"Buy {kw1} at the best price. Compare deals, read reviews, and get fast delivery. Check {kw2} availability and order today!",
-        "category":  f"Browse our collection of {kw1}. Find the best deals on {kw2}. Shop now for exclusive offers and fast shipping!",
+        "category":  f"Browse our {kw1} collection. Find the best deals on {kw2}. Shop now for exclusive offers and fast delivery!",
         "blog":      f"Learn everything about {kw1} in this complete guide. Discover tips on {kw2}, expert advice, and step-by-step instructions.",
-        "page":      f"Learn about {kw1} and {kw2}. Get detailed information, tips, and expert guidance. Visit us today!",
+        "static":    f"Learn about {kw1} at [Brand]. Get detailed information, tips, and expert guidance.",
+        "page":      f"Discover {kw1} and {kw2} at [Brand]. Get detailed information, expert tips, and guidance. Visit us today!",
     }
     if not current:
         return templates.get(page_type, templates["page"])
@@ -260,13 +262,14 @@ def _smart_h1(current_list: list, page_type: str, keywords: list) -> str:
     kw = keywords[0][0].title() if keywords else "[Primary Keyword]"
     if not current_list:
         templates = {
-            "homepage":  f"Sell Your Old Phone & Get Instant Cash — {kw}",
-            "product":   f"Buy {kw} — Best Price Guaranteed",
-            "category":  f"Shop {kw} — Exclusive Deals",
-            "blog":      f"{kw}: Complete Guide for Beginners",
-            "page":      f"Everything You Need to Know About {kw}",
+            "homepage":  f"{kw} — [Your Unique Value Proposition]",
+            "product":   f"{kw} — Best Price & Fast Delivery",
+            "category":  f"Shop {kw} — Find the Best Deals",
+            "blog":      f"{kw}: Complete Guide [Year]",
+            "static":    f"{kw} | [Brand Name]",
+            "page":      f"{kw} — [Describe What You Offer]",
         }
-        return templates.get(page_type, f"{kw} — Find the Best Deals Online")
+        return templates.get(page_type, f"{kw} — [Add Your Value Proposition]")
     if len(current_list) > 1:
         return current_list[0]
     return current_list[0]
@@ -355,30 +358,35 @@ def _schema_template(page_type: str, url: str, title: str, description: str, key
 def _internal_link_suggestions(page_type: str) -> list:
     m = {
         "product": [
-            {"anchor": "View similar products", "target": "/category/[category-slug]", "reason": "Boosts category page authority"},
-            {"anchor": "Read our buying guide", "target": "/blog/[buying-guide-slug]", "reason": "Improves dwell time"},
-            {"anchor": "Check other brands", "target": "/brand/[brand-slug]", "reason": "Internal link diversity"},
+            {"anchor": "View similar products", "target": "/category/[category-slug]", "reason": "Passes link equity to category page"},
+            {"anchor": "Read our buying guide", "target": "/blog/[guide-slug]", "reason": "Improves dwell time and topical authority"},
+            {"anchor": "Browse by brand", "target": "/brand/[brand-slug]", "reason": "Internal link diversity"},
             {"anchor": "See customer reviews", "target": "#reviews", "reason": "Reduces bounce rate"},
-            {"anchor": "Compare prices", "target": "/compare/[product-slug]", "reason": "Topical authority"},
+            {"anchor": "Compare options", "target": "/compare/[product-slug]", "reason": "Topical depth signal"},
         ],
         "category": [
-            {"anchor": "Top selling phones", "target": "/category/[sub-category]", "reason": "Deeper crawl path"},
-            {"anchor": "Read our guide", "target": "/blog/[guide-slug]", "reason": "Content depth signal"},
-            {"anchor": "Featured brands", "target": "/brand/[brand-slug]", "reason": "Brand authority"},
-            {"anchor": "Best deals today", "target": "/deals", "reason": "Conversion boost"},
+            {"anchor": "Top products in this category", "target": "/category/[sub-category]", "reason": "Deeper crawl path for Google"},
+            {"anchor": "Read our complete guide", "target": "/blog/[guide-slug]", "reason": "Content depth signal"},
+            {"anchor": "Browse by brand", "target": "/brand/[brand-slug]", "reason": "Brand authority pages"},
+            {"anchor": "View all deals", "target": "/deals", "reason": "Conversion page boost"},
         ],
         "blog": [
-            {"anchor": "[Related article title]", "target": "/blog/[related-slug]", "reason": "Topical cluster"},
-            {"anchor": "Shop [product]", "target": "/product/[product-slug]", "reason": "Revenue link"},
+            {"anchor": "[Related article title]", "target": "/blog/[related-slug]", "reason": "Topical content cluster"},
+            {"anchor": "Explore our [product/service]", "target": "/[main-service-page]", "reason": "Revenue page link"},
             {"anchor": "See all [category]", "target": "/category/[category-slug]", "reason": "Navigation depth"},
             {"anchor": "About us", "target": "/about", "reason": "Trust signal"},
         ],
         "homepage": [
-            {"anchor": "Sell your phone", "target": "/sell-phone", "reason": "Main conversion page"},
-            {"anchor": "Buy refurbished", "target": "/buy-phone", "reason": "Revenue page"},
-            {"anchor": "Top brands", "target": "/brand/apple", "reason": "Brand authority"},
-            {"anchor": "How it works", "target": "/how-it-works", "reason": "Trust builder"},
-            {"anchor": "Blog & guides", "target": "/blog", "reason": "Content authority"},
+            {"anchor": "[Main service/product]", "target": "/[main-service-slug]", "reason": "Primary conversion page"},
+            {"anchor": "How it works", "target": "/how-it-works", "reason": "Trust builder — reduces bounce"},
+            {"anchor": "Browse [category]", "target": "/[category-slug]", "reason": "Category page authority"},
+            {"anchor": "Our blog & guides", "target": "/blog", "reason": "Content authority signal"},
+            {"anchor": "Contact us", "target": "/contact", "reason": "Local SEO + trust signal"},
+        ],
+        "static": [
+            {"anchor": "Back to home", "target": "/", "reason": "Homepage authority"},
+            {"anchor": "Our services", "target": "/[service-slug]", "reason": "Conversion funnel"},
+            {"anchor": "Read our blog", "target": "/blog", "reason": "Content depth"},
         ],
     }
     return m.get(page_type, [
@@ -471,7 +479,7 @@ import {{ NextSeo }} from 'next-seo';
 
 # ── Content improvement suggestions ──────────────────────────────────────────
 
-def _content_suggestions(page_type: str, word_count: int, keywords: list, h2: list, h3: list) -> list:
+def _content_suggestions(page_type: str, word_count: int, keywords: list, h2: list, h3: list = None) -> list:  # noqa: ARG001 (h3 reserved)
     suggs = []
     kw = keywords[0][0] if keywords else "your main topic"
 
@@ -792,17 +800,36 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 </script>""",
             "ecommerce_events": [
                 {"event": "view_item", "trigger": "Product page load", "code": """gtag('event', 'view_item', {
-  currency: 'INR',
-  value: 15000,
-  items: [{ item_id: 'SKU_001', item_name: 'iPhone 13', item_category: 'Phones', price: 15000, quantity: 1 }]
+  currency: '[CURRENCY_CODE]',       // e.g. 'INR', 'USD'
+  value: [PRODUCT_PRICE],
+  items: [{
+    item_id: '[YOUR_SKU]',
+    item_name: '[Product Name]',
+    item_category: '[Category]',
+    price: [PRODUCT_PRICE],
+    quantity: 1
+  }]
 });"""},
                 {"event": "add_to_cart", "trigger": "Add to Cart click", "code": """gtag('event', 'add_to_cart', {
-  currency: 'INR', value: 15000,
-  items: [{ item_id: 'SKU_001', item_name: 'iPhone 13', price: 15000, quantity: 1 }]
+  currency: '[CURRENCY_CODE]',
+  value: [PRODUCT_PRICE],
+  items: [{
+    item_id: '[YOUR_SKU]',
+    item_name: '[Product Name]',
+    price: [PRODUCT_PRICE],
+    quantity: 1
+  }]
 });"""},
                 {"event": "purchase", "trigger": "Order confirmation page", "code": """gtag('event', 'purchase', {
-  transaction_id: 'T_12345', value: 15000, currency: 'INR',
-  items: [{ item_id: 'SKU_001', item_name: 'iPhone 13', price: 15000, quantity: 1 }]
+  transaction_id: '[ORDER_ID]',
+  value: [ORDER_TOTAL],
+  currency: '[CURRENCY_CODE]',
+  items: [{
+    item_id: '[YOUR_SKU]',
+    item_name: '[Product Name]',
+    price: [PRODUCT_PRICE],
+    quantity: [QTY]
+  }]
 });"""},
             ],
         },
@@ -829,14 +856,22 @@ src="https://www.facebook.com/tr?id=YOUR_PIXEL_ID&ev=PageView&noscript=1"/></nos
 <!-- End Meta Pixel Code -->""",
             "ecommerce_events": [
                 {"event": "ViewContent", "trigger": "Product page", "code": """fbq('track', 'ViewContent', {
-  content_ids: ['SKU_001'], content_type: 'product', value: 15000, currency: 'INR'
+  content_ids: ['[YOUR_SKU]'],
+  content_type: 'product',
+  value: [PRODUCT_PRICE],
+  currency: '[CURRENCY_CODE]'   // e.g. 'INR', 'USD'
 });"""},
                 {"event": "AddToCart", "trigger": "Add to Cart button", "code": """fbq('track', 'AddToCart', {
-  content_ids: ['SKU_001'], content_type: 'product', value: 15000, currency: 'INR'
+  content_ids: ['[YOUR_SKU]'],
+  content_type: 'product',
+  value: [PRODUCT_PRICE],
+  currency: '[CURRENCY_CODE]'
 });"""},
                 {"event": "Purchase", "trigger": "Order confirmation", "code": """fbq('track', 'Purchase', {
-  value: 15000, currency: 'INR',
-  contents: [{ id: 'SKU_001', quantity: 1 }], content_type: 'product'
+  value: [ORDER_TOTAL],
+  currency: '[CURRENCY_CODE]',
+  contents: [{ id: '[YOUR_SKU]', quantity: [QTY] }],
+  content_type: 'product'
 });"""},
             ],
         },

@@ -71,3 +71,61 @@ class PageData(Base):
     suggestions = Column(JSON, nullable=True)
 
     audit = relationship("Audit", back_populates="pages")
+
+
+# ── Google Search Console ──────────────────────────────────────────────────────
+
+class GSCCredential(Base):
+    """OAuth tokens per user — one row per connected account."""
+    __tablename__ = "gsc_credentials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), unique=True)
+    access_token = Column(Text)
+    refresh_token = Column(Text, nullable=True)
+    token_expiry = Column(DateTime, nullable=True)
+    connected_at = Column(DateTime, default=datetime.utcnow)
+
+
+class GSCReport(Base):
+    """One row per GSC audit job — stores all fetched data + analysis."""
+    __tablename__ = "gsc_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    property_url = Column(String)
+    status = Column(String, default="running")     # running | completed | failed
+    progress = Column(Integer, default=0)
+    progress_message = Column(String, default="")
+
+    # Raw GSC data
+    overview = Column(JSON, nullable=True)          # {clicks, impressions, ctr, position, date_range}
+    top_queries = Column(JSON, nullable=True)       # [{query, clicks, impressions, ctr, position}]
+    top_pages = Column(JSON, nullable=True)         # [{page, clicks, impressions, ctr, position}]
+    date_trend = Column(JSON, nullable=True)        # [{date, clicks, impressions, ctr, position}]
+    device_breakdown = Column(JSON, nullable=True)  # [{device, clicks, impressions, ctr, position}]
+    period_comparison = Column(JSON, nullable=True) # {current: {...}, previous: {...}}
+
+    # Detected issues
+    opportunities = Column(JSON, nullable=True)     # page-2 keyword opportunities
+    declining_pages = Column(JSON, nullable=True)   # pages losing clicks
+    ctr_opportunities = Column(JSON, nullable=True) # high impressions, low CTR
+
+    # AI analysis
+    ai_insights = Column(JSON, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+
+# ── Tools ─────────────────────────────────────────────────────────────────────
+
+class TrackedKeyword(Base):
+    """Keywords the user wants to monitor position for via GSC."""
+    __tablename__ = "tracked_keywords"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    keyword = Column(String)
+    site_url = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)

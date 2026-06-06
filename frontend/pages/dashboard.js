@@ -4,6 +4,8 @@ import VoiceInput from "../components/VoiceInput";
 import AuditProgress from "../components/AuditProgress";
 import ReportViewer from "../components/ReportViewer";
 import CompetitorPanel from "../components/CompetitorPanel";
+import SearchConsolePanel from "../components/SearchConsolePanel";
+import ToolsPanel from "../components/ToolsPanel";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -65,7 +67,11 @@ export default function Dashboard() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("audit"); // audit | results | history | competitor
+  const [activeTab, setActiveTab] = useState("audit"); // audit | results | history | competitor | gsc | benchmarks
+
+  const [benchmarks, setBenchmarks] = useState(null);
+  const [benchmarkUrl, setBenchmarkUrl] = useState("");
+  const [benchmarkLoading, setBenchmarkLoading] = useState(false);
 
   const pollRef = useRef(null);
 
@@ -240,6 +246,20 @@ export default function Dashboard() {
       .catch(() => setError("Download failed"));
   };
 
+  const loadBenchmarks = async (filterUrl) => {
+    setBenchmarkLoading(true);
+    try {
+      const qs = filterUrl ? `?url=${encodeURIComponent(filterUrl)}` : "";
+      const data = await apiFetch(`/api/audit/benchmarks${qs}`, token);
+      setBenchmarks(data);
+      if (!filterUrl && data.available_urls?.length) setBenchmarkUrl(data.available_urls[0]);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBenchmarkLoading(false);
+    }
+  };
+
   const handleLoadHistoryAudit = async (audit) => {
     setCurrentAudit({ audit_id: audit.audit_id });
     setAuditStatus(audit);
@@ -388,10 +408,13 @@ export default function Dashboard() {
         {/* Main Tabs */}
         <div className="flex gap-0.5 overflow-x-auto" style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
           {[
-            { key: "audit",      label: "⏳ Progress",   disabled: !auditStatus },
-            { key: "results",    label: "📊 Results",    disabled: !auditResults },
-            { key: "competitor", label: "⚔️ Competitor", disabled: false },
+            { key: "audit",      label: "⏳ Progress",      disabled: !auditStatus },
+            { key: "results",    label: "📊 Results",       disabled: !auditResults },
+            { key: "competitor", label: "⚔️ Competitor",    disabled: false },
+            { key: "gsc",        label: "🔎 Search Console", disabled: false },
             { key: "history",    label: `🕐 History (${auditHistory.length})`, disabled: false },
+            { key: "benchmarks", label: "📊 Benchmarks", disabled: false },
+            { key: "tools",      label: "🛠️ Tools",      disabled: false },
           ].map((tab) => (
             <button key={tab.key} onClick={() => !tab.disabled && setActiveTab(tab.key)} disabled={tab.disabled}
               className="px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors -mb-px"
@@ -410,6 +433,17 @@ export default function Dashboard() {
           <ReportViewer results={auditResults} reportFiles={reportFiles} onDownload={handleDownloadZip} token={token} auditId={currentAudit?.audit_id} apiBase={API} />
         )}
         {activeTab === "competitor" && <CompetitorPanel token={token} />}
+        {activeTab === "gsc" && <SearchConsolePanel token={token} />}
+        {activeTab === "tools" && <ToolsPanel token={token} />}
+        {activeTab === "benchmarks" && (
+          <BenchmarkPanel
+            benchmarks={benchmarks}
+            loading={benchmarkLoading}
+            onLoad={loadBenchmarks}
+            filterUrl={benchmarkUrl}
+            setFilterUrl={setBenchmarkUrl}
+          />
+        )}
 
         {activeTab === "history" && (
           <div className="card">
@@ -447,6 +481,199 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ── Benchmark Panel ───────────────────────────────────────────────────────────
+
+const SCORE_META = {
+  performance:    { label: "Performance",    color: "#f97316", icon: "⚡" },
+  seo:            { label: "SEO",            color: "#22c55e", icon: "🔎" },
+  accessibility:  { label: "Accessibility",  color: "#00d4ff", icon: "♿" },
+  best_practices: { label: "Best Practices", color: "#a78bfa", icon: "✅" },
+  onpage:         { label: "On-Page SEO",    color: "#fbbf24", icon: "📄" },
+};
+
+function ScoreRing({ value, color, size = 68 }) {
+  if (value == null) return <span className="text-xs" style={{ color:"#374151" }}>N/A</span>;
+  const r = (size - 8) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = (value / 100) * circ;
+  return (
+    <svg width={size} height={size}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth={6}/>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={6}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        style={{ transform:"rotate(-90deg)", transformOrigin:"50% 50%" }}/>
+      <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle"
+        style={{ fill: color, fontSize: size * 0.24, fontWeight: 700 }}>
+        {value}
+      </text>
+    </svg>
+  );
+}
+
+function BenchmarkPanel({ benchmarks, loading, onLoad, filterUrl, setFilterUrl }) {
+  const [loaded, setLoaded] = useState(false);
+
+  const handleLoad = (url) => { setLoaded(true); onLoad(url); };
+
+  const audits  = benchmarks?.audits || [];
+  const urls    = benchmarks?.available_urls || [];
+  const latest  = audits[0];
+  const prev    = audits[1];
+  const keys    = Object.keys(SCORE_META);
+
+  if (!loaded && !benchmarks) {
+    return (
+      <div className="card text-center py-12 space-y-4">
+        <p className="text-4xl">📊</p>
+        <div>
+          <p className="text-lg font-bold" style={{ color:"#e2e8f0" }}>Audit Score Benchmarking</p>
+          <p className="text-sm mt-2" style={{ color:"#4b5563" }}>
+            Track PageSpeed &amp; on-page SEO scores over time.<br/>
+            Compare each audit against the previous one.
+          </p>
+        </div>
+        <button onClick={() => handleLoad("")} className="btn-primary mx-auto flex items-center gap-2">
+          📊 Load Benchmarks
+        </button>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="card flex flex-col items-center justify-center py-12 gap-4">
+        <div className="animate-spin w-8 h-8 rounded-full"
+          style={{ border:"2px solid rgba(0,212,255,0.2)", borderTopColor:"#00d4ff" }}/>
+        <p className="text-sm" style={{ color:"#4b5563" }}>Loading score history...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Filter bar */}
+      <div className="card flex flex-wrap items-center gap-3">
+        <p className="text-sm font-semibold" style={{ color:"#e2e8f0" }}>📊 Score History</p>
+        {urls.length > 1 && (
+          <select value={filterUrl}
+            onChange={e => { setFilterUrl(e.target.value); handleLoad(e.target.value); }}
+            className="input-field text-xs py-1.5 px-3" style={{ maxWidth:"300px" }}>
+            <option value="">All URLs</option>
+            {urls.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+        )}
+        <button onClick={() => handleLoad(filterUrl)}
+          className="text-xs px-3 py-1.5 rounded-lg font-medium ml-auto"
+          style={{ background:"rgba(255,255,255,0.05)", color:"#94a3b8", border:"1px solid rgba(255,255,255,0.08)" }}>
+          ↻ Refresh
+        </button>
+      </div>
+
+      {audits.length === 0 ? (
+        <div className="card text-center py-8">
+          <p className="text-sm" style={{ color:"#4b5563" }}>No completed audits found. Run an audit first.</p>
+        </div>
+      ) : (
+        <>
+          {/* Latest vs Previous comparison cards */}
+          {latest && (
+            <div className="card space-y-3">
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color:"#4b5563" }}>
+                Latest vs Previous Audit
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                {keys.map(key => {
+                  const meta  = SCORE_META[key];
+                  const cur   = latest.scores?.[key];
+                  const pval  = prev?.scores?.[key];
+                  const delta = cur != null && pval != null ? cur - pval : null;
+                  return (
+                    <div key={key} className="flex flex-col items-center gap-2 p-3 rounded-xl"
+                      style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)" }}>
+                      <p className="text-xs font-semibold" style={{ color:"#6b7280" }}>{meta.icon} {meta.label}</p>
+                      <ScoreRing value={cur} color={meta.color} />
+                      <div className="text-xs flex items-center gap-1" style={{ color:"#4b5563" }}>
+                        prev: <span style={{ color:"#94a3b8" }}>{pval ?? "—"}</span>
+                        {delta != null && delta !== 0 && (
+                          <span className="font-bold" style={{ color: delta > 0 ? "#22c55e" : "#ef4444" }}>
+                            {delta > 0 ? "+" : ""}{delta}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-xs" style={{ color:"#374151" }}>
+                Latest: <span style={{ color:"#94a3b8" }}>{latest.url}</span> ·{" "}
+                {new Date(latest.created_at).toLocaleDateString("en-IN", { day:"numeric", month:"short", year:"numeric" })}
+              </p>
+            </div>
+          )}
+
+          {/* Score history table */}
+          <div className="card overflow-x-auto">
+            <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color:"#4b5563" }}>
+              Score History (last 10 audits)
+            </p>
+            <table className="w-full text-xs">
+              <thead>
+                <tr style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                  {["Date","URL","Type",...keys.map(k => SCORE_META[k].icon + " " + SCORE_META[k].label)].map(h => (
+                    <th key={h} className="text-left py-2 px-3 font-semibold uppercase tracking-wide whitespace-nowrap"
+                      style={{ color:"#4b5563" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {audits.map((a, i) => {
+                  const prevRow = audits[i + 1];
+                  return (
+                    <tr key={a.audit_id} style={{ borderBottom:"1px solid rgba(255,255,255,0.03)" }}
+                      className="transition-colors hover:bg-white hover:bg-opacity-5">
+                      <td className="py-2.5 px-3 whitespace-nowrap" style={{ color:"#94a3b8" }}>
+                        {new Date(a.created_at).toLocaleDateString("en-IN", { day:"numeric", month:"short" })}
+                      </td>
+                      <td className="py-2.5 px-3" style={{ maxWidth:"180px" }}>
+                        <span className="truncate block font-mono" style={{ color:"#e2e8f0" }} title={a.url}>
+                          {a.url.replace(/^https?:\/\//, "")}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <span className="badge-blue">{a.audit_type}</span>
+                      </td>
+                      {keys.map(k => {
+                        const cur  = a.scores?.[k];
+                        const pval = prevRow?.scores?.[k];
+                        return (
+                          <td key={k} className="py-2.5 px-3 text-center">
+                            {cur != null ? (
+                              <span className="font-bold"
+                                style={{ color: cur >= 90 ? "#22c55e" : cur >= 70 ? "#fbbf24" : "#ef4444" }}>
+                                {cur}
+                                {pval != null && cur !== pval && (
+                                  <span className="text-xs font-normal ml-0.5"
+                                    style={{ color: cur > pval ? "#22c55e" : "#ef4444" }}>
+                                    {cur > pval ? "↑" : "↓"}
+                                  </span>
+                                )}
+                              </span>
+                            ) : <span style={{ color:"#374151" }}>—</span>}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   );
 }

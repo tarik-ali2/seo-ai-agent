@@ -234,6 +234,60 @@ def _before_after_table(doc, rows: list):
             _set_cell_borders(c)
 
 
+# ── Pages overview table ──────────────────────────────────────────────────────
+
+def _pages_overview_table(doc, pages_analysis: list):
+    """Table: #, URL, Page Title, Short Summary (meta or body snippet)."""
+    if not pages_analysis:
+        doc.add_paragraph("No pages crawled.")
+        return
+
+    _kv(doc, "Total Pages Crawled", len(pages_analysis))
+    doc.add_paragraph()
+
+    table = doc.add_table(rows=1, cols=4)
+    table.style = "Table Grid"
+
+    headers = ["#", "Page URL", "Title", "Summary (Meta / Content)"]
+    bg_colors = ["1A73E8", "1A73E8", "1A73E8", "1A73E8"]
+    for cell, text, bg in zip(table.rows[0].cells, headers, bg_colors):
+        _set_cell_bg(cell, bg)
+        _cell_text(cell, text, bold=True, color=C_WHITE, size=9)
+
+    # column widths
+    col_widths = [Cm(1.0), Cm(5.5), Cm(4.5), Cm(7.5)]
+    for i, col in enumerate(table.columns):
+        for cell in col.cells:
+            cell.width = col_widths[i]
+
+    for idx, page in enumerate(pages_analysis, 1):
+        url = page.get("url", "")
+        title = page.get("current", {}).get("title") or page.get("title", "") or "—"
+        meta = (
+            page.get("current", {}).get("meta_description")
+            or page.get("meta_description", "")
+            or page.get("body_text_sample", "")[:150]
+            or "—"
+        )
+        # trim long strings
+        url_display = url if len(url) <= 70 else "…" + url[-67:]
+        title_display = title[:80]
+        summary_display = meta[:180]
+
+        row = table.add_row().cells
+        bg = "F8F9FA" if idx % 2 == 0 else "FFFFFF"
+        for c in row:
+            _set_cell_bg(c, bg)
+            _set_cell_borders(c)
+
+        _cell_text(row[0], str(idx), bold=True, size=9,
+                   align=WD_ALIGN_PARAGRAPH.CENTER,
+                   color=C_BLUE)
+        _cell_text(row[1], url_display, size=8, color=C_GRAY)
+        _cell_text(row[2], title_display, size=9, color=C_DARK)
+        _cell_text(row[3], summary_display, size=8.5, color=RGBColor(0x44, 0x44, 0x44))
+
+
 # ── Keyword table ─────────────────────────────────────────────────────────────
 
 def _keyword_table(doc, keywords: list):
@@ -261,7 +315,7 @@ def _keyword_table(doc, keywords: list):
 # DOCUMENT 1 — Technical SEO Audit
 # ══════════════════════════════════════════════════════════════════════════════
 
-def create_technical_seo_doc(technical_data: dict, output_path: str):
+def create_technical_seo_doc(technical_data: dict, output_path: str, pages_analysis: list = None):
     doc = Document()
     _setup_margins(doc)
 
@@ -294,10 +348,20 @@ def create_technical_seo_doc(technical_data: dict, output_path: str):
     _issues_table(doc, issues)
     doc.add_paragraph()
 
+    # Crawled Pages Overview
+    _page_break(doc)
+    _h1(doc, "3. Crawled Pages Overview")
+    doc.add_paragraph(
+        "All pages discovered and crawled during this audit. "
+        "Summary column shows meta description or page content snippet."
+    )
+    doc.add_paragraph()
+    _pages_overview_table(doc, pages_analysis or [])
+
     # Recommendations
     recs = technical_data.get("recommendations", [])
     if recs:
-        _h1(doc, "3. What's Working Well")
+        _h1(doc, "4. What's Working Well")
         for r in recs:
             p = doc.add_paragraph(style="List Bullet")
             run = p.add_run(f"✅ {r}")
@@ -420,6 +484,11 @@ def create_pagewise_seo_doc(pages_analysis: list, output_path: str):
     _kv(doc, "Critical Issues", critical_count, highlight=True)
     _kv(doc, "High Priority Issues", high_count)
     _kv(doc, "Average SEO Score", f"{_avg_score(pages_analysis)}/100")
+
+    # All crawled pages with URLs and summaries
+    doc.add_paragraph()
+    _h2(doc, "All Crawled Pages — URL & Summary")
+    _pages_overview_table(doc, pages_analysis)
 
     # Score summary table
     doc.add_paragraph()
@@ -992,7 +1061,7 @@ def generate_all_documents(audit_data: dict, output_dir: str) -> str:
         "tracking":  os.path.join(output_dir, "4_GTM_GA4_MetaPixel_Guide.docx"),
     }
 
-    create_technical_seo_doc(technical, paths["technical"])
+    create_technical_seo_doc(technical, paths["technical"], pages_analysis=pages)
     if pages:
         create_pagewise_seo_doc(pages, paths["pagewise"])
     create_developer_guide_doc(pages, technical, paths["developer"])
